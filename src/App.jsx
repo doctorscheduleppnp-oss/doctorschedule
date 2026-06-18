@@ -496,16 +496,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <div className="pointer-events-none fixed left-3 top-3 z-50 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm sm:left-4 sm:top-4">
-        <img
-          src={hospitalLogo}
-          alt="โรงพยาบาลพริ้นซ์ ปากน้ำโพ"
-          className="h-14 w-12 object-contain sm:h-16 sm:w-14"
-        />
-      </div>
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="pl-20 sm:pl-24 lg:pl-20">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <img
+              src={hospitalLogo}
+              alt="โรงพยาบาลพริ้นซ์ ปากน้ำโพ"
+              className="h-14 w-12 shrink-0 object-contain sm:h-16 sm:w-14"
+            />
             <h1 className="text-2xl font-semibold tracking-tight text-slate-950">{copy.appTitle}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
