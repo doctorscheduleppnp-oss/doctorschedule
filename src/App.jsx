@@ -7,6 +7,7 @@ import AdminUserManagement from "./components/AdminUserManagement";
 import ConsultDashboard from "./components/ConsultDashboard";
 import PublicDashboard from "./components/PublicDashboard";
 import WeeklyCalendarModal from "./components/WeeklyCalendarModal";
+import hospitalLogo from "./assets/princ-paknampho-logo.png";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { buildSampleConsultAssignments } from "./lib/consult";
 import { buildSampleSchedules, sampleDepartments, sampleDoctors } from "./lib/sampleData";
@@ -497,8 +498,13 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+          <div className="flex items-center justify-between gap-4">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-950">{copy.appTitle}</h1>
+            <img
+              src={hospitalLogo}
+              alt="โรงพยาบาลพริ้นซ์ ปากน้ำโพ"
+              className="h-16 w-14 shrink-0 object-contain lg:hidden"
+            />
           </div>
           <div className="flex flex-wrap items-center gap-3">
           <nav className="flex flex-wrap gap-2">
@@ -531,6 +537,11 @@ export default function App() {
               </button>
             ))}
           </div>
+          <img
+            src={hospitalLogo}
+            alt="โรงพยาบาลพริ้นซ์ ปากน้ำโพ"
+            className="hidden h-24 w-20 shrink-0 object-contain lg:block"
+          />
           </div>
         </div>
       </header>
