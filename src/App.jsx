@@ -13,6 +13,7 @@ import { buildSampleConsultAssignments } from "./lib/consult";
 import { buildSampleSchedules, sampleDepartments, sampleDoctors } from "./lib/sampleData";
 import { getStartOfWeek, getWeekDays, hourKeys, toISODate } from "./lib/date";
 import { getInitialLanguage, LANGUAGE_STORAGE_KEY, translations } from "./lib/i18n";
+import { findImportDepartment, isImportedDoctorDuplicate } from "./lib/doctorImport";
 
 const baseTabs = [
   { id: "public" },
@@ -235,12 +236,17 @@ export default function App() {
     if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
     const preparedPayload = prepareDepartmentPayload(payload);
     if (!hasSupabaseConfig) {
-      setDepartments((current) => [...current, { ...preparedPayload, id: crypto.randomUUID() }]);
-      return;
+      const created = { ...preparedPayload, id: crypto.randomUUID() };
+      setDepartments((current) => [...current, created]);
+      return created;
     }
     const { data, error } = await supabase.from("departments").insert(preparedPayload).select().single();
-    if (error) return setNotice(error.message);
+    if (error) {
+      setNotice(error.message);
+      return null;
+    }
     setDepartments((current) => [...current, data]);
+    return data;
   }
 
   async function updateDepartment(id, payload) {
@@ -296,12 +302,69 @@ export default function App() {
     if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
     const preparedPayload = prepareDoctorPayload(payload);
     if (!hasSupabaseConfig) {
-      setDoctors((current) => [...current, { ...preparedPayload, id: crypto.randomUUID() }]);
-      return;
+      const created = { ...preparedPayload, id: crypto.randomUUID() };
+      setDoctors((current) => [...current, created]);
+      return created;
     }
     const { data, error } = await supabase.from("doctors").insert(preparedPayload).select().single();
-    if (error) return setNotice(error.message);
+    if (error) {
+      setNotice(error.message);
+      return null;
+    }
     setDoctors((current) => [...current, data]);
+    return data;
+  }
+
+  async function importDoctorsFromExcel(rows) {
+    if (!isAdmin) {
+      setNotice("เฉพาะ Admin เท่านั้นที่นำเข้าข้อมูลจาก Excel ได้");
+      return null;
+    }
+
+    const departmentPool = [...departments];
+    const doctorPool = [...doctors];
+    const summary = { departmentsCreated: 0, doctorsCreated: 0, doctorsSkipped: 0, failed: 0 };
+
+    for (const row of rows) {
+      let department = findImportDepartment(row, departmentPool);
+      if (!department) {
+        department = await createDepartment({
+          name_th: row.department_th,
+          name_en: row.department_en,
+          description_th: "",
+          description_en: ""
+        });
+        if (!department) {
+          summary.failed += 1;
+          continue;
+        }
+        departmentPool.push(department);
+        summary.departmentsCreated += 1;
+      }
+
+      if (isImportedDoctorDuplicate(row, department.id, doctorPool)) {
+        summary.doctorsSkipped += 1;
+        continue;
+      }
+
+      const doctor = await createDoctor({
+        name_th: row.doctor_th,
+        name_en: row.doctor_en,
+        specialty_th: row.specialty_th,
+        specialty_en: row.specialty_en,
+        department_id: department.id,
+        image_url: ""
+      });
+      if (!doctor) {
+        summary.failed += 1;
+        continue;
+      }
+      doctorPool.push(doctor);
+      summary.doctorsCreated += 1;
+    }
+
+    setNotice(`Import เสร็จแล้ว: เพิ่มแพทย์ ${summary.doctorsCreated} คน และแผนก ${summary.departmentsCreated} แผนก`);
+    return summary;
   }
 
   async function updateDoctor(id, payload) {
@@ -593,6 +656,8 @@ export default function App() {
             onUpdateDoctor={updateDoctor}
             onToggleDoctorActive={toggleDoctorActive}
             onUploadDoctorImage={uploadDoctorImage}
+            canImport={isAdmin}
+            onImportDoctors={importDoctorsFromExcel}
           />
         )}
 

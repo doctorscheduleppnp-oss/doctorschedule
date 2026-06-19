@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Icon } from "./icons";
 import { getLocalizedValue } from "../lib/i18n";
+import AdminDoctorImport from "./AdminDoctorImport";
 
 const emptyDepartment = { name_th: "", name_en: "", description_th: "", description_en: "" };
 const emptyDoctor = { name_th: "", name_en: "", specialty_th: "", specialty_en: "", department_id: "", image_url: "" };
@@ -14,7 +15,9 @@ export default function AdminDepartmentsDoctors({
   onCreateDoctor,
   onUpdateDoctor,
   onToggleDoctorActive,
-  onUploadDoctorImage
+  onUploadDoctorImage,
+  canImport = false,
+  onImportDoctors
 }) {
   const [departmentForm, setDepartmentForm] = useState(emptyDepartment);
   const [departmentLanguage, setDepartmentLanguage] = useState("th");
@@ -99,7 +102,9 @@ export default function AdminDepartmentsDoctors({
   }
 
   return (
-    <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+    <>
+      {canImport ? <AdminDoctorImport onImport={onImportDoctors} /> : null}
+      <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-slate-950">จัดการแผนก</h2>
@@ -247,7 +252,8 @@ export default function AdminDepartmentsDoctors({
           })}
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }
 
