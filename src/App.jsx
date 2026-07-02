@@ -15,6 +15,7 @@ import { getStartOfWeek, getWeekDays, hourKeys, toISODate } from "./lib/date";
 import { getInitialLanguage, LANGUAGE_STORAGE_KEY, translations } from "./lib/i18n";
 import { findImportDepartment, isImportedDoctorDuplicate } from "./lib/doctorImport";
 import { makeDoctorImagePath, validateDoctorImage } from "./lib/doctorImage";
+import { collectPaginatedRows } from "./lib/pagination";
 
 const baseTabs = [
   { id: "public" },
@@ -208,8 +209,8 @@ export default function App() {
       const [departmentResult, doctorResult, scheduleResult, consultResult] = await Promise.all([
         supabase.from("departments").select("*").order("name"),
         supabase.from("doctors").select("*").order("name"),
-        supabase.from("schedules").select("*").order("date"),
-        supabase.from("consult_assignments").select("*").order("date")
+        loadAllTableRows("schedules"),
+        loadAllTableRows("consult_assignments")
       ]);
 
       if (departmentResult.error) throw departmentResult.error;
@@ -231,6 +232,17 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function loadAllTableRows(table) {
+    return collectPaginatedRows((from, to) => (
+      supabase
+        .from(table)
+        .select("*")
+        .order("date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    ));
   }
 
   async function createDepartment(payload) {
