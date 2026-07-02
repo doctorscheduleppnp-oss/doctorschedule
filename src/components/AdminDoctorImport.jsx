@@ -122,7 +122,7 @@ export default function AdminDoctorImport({ onImport }) {
 
           {summary ? (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-              Import เสร็จแล้ว: เพิ่มแผนก {summary.departmentsCreated} แผนก, เพิ่มแพทย์ {summary.doctorsCreated} คน, ข้ามข้อมูลซ้ำ {summary.doctorsSkipped} คน{summary.failed ? `, ไม่สำเร็จ ${summary.failed} คน` : ""}
+              Import เสร็จแล้ว: เพิ่มแผนก {summary.departmentsCreated} แผนก, เพิ่มแพทย์ {summary.doctorsCreated} คน, เพิ่มสังกัดแผนก {summary.departmentLinksAdded || 0} รายการ, ข้ามข้อมูลซ้ำ {summary.doctorsSkipped} คน{summary.failed ? `, ไม่สำเร็จ ${summary.failed} คน` : ""}
             </div>
           ) : null}
         </div>

@@ -13,9 +13,14 @@ import { buildSampleConsultAssignments } from "./lib/consult";
 import { buildSampleSchedules, sampleDepartments, sampleDoctors } from "./lib/sampleData";
 import { getStartOfWeek, getWeekDays, hourKeys, toISODate } from "./lib/date";
 import { getInitialLanguage, LANGUAGE_STORAGE_KEY, translations } from "./lib/i18n";
-import { findImportDepartment, isImportedDoctorDuplicate } from "./lib/doctorImport";
+import { findImportDepartment, findImportedDoctor, isImportedDoctorDuplicate } from "./lib/doctorImport";
 import { makeDoctorImagePath, validateDoctorImage } from "./lib/doctorImage";
 import { collectPaginatedRows } from "./lib/pagination";
+import {
+  attachDoctorDepartments,
+  getDoctorDepartmentIds,
+  normalizeDoctorDepartments
+} from "./lib/doctorDepartments";
 
 const baseTabs = [
   { id: "public" },
@@ -31,7 +36,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("public");
   const [language, setLanguage] = useState(getInitialLanguage);
   const [departments, setDepartments] = useState(sampleDepartments);
-  const [doctors, setDoctors] = useState(sampleDoctors);
+  const [doctors, setDoctors] = useState(() => attachDoctorDepartments(sampleDoctors, []));
   const [schedules, setSchedules] = useState(buildSampleSchedules());
   const [consultAssignments, setConsultAssignments] = useState(
     buildSampleConsultAssignments(sampleDepartments, sampleDoctors)
@@ -66,7 +71,10 @@ export default function App() {
     [activeDepartments]
   );
   const activeDoctors = useMemo(
-    () => doctors.filter((doctor) => doctor.is_active !== false && activeDepartmentIds.has(doctor.department_id)),
+    () => doctors.filter((doctor) => (
+      doctor.is_active !== false
+      && getDoctorDepartmentIds(doctor).some((departmentId) => activeDepartmentIds.has(departmentId))
+    )),
     [doctors, activeDepartmentIds]
   );
   const visibleTabs = tabs.filter((tab) => {
@@ -88,7 +96,8 @@ export default function App() {
       if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt) || updatedAt - createdAt < 1000) return;
 
       const doctor = doctors.find((item) => item.id === schedule.doctor_id);
-      if (!doctor || doctor.is_active === false || !activeDepartmentIds.has(doctor.department_id)) return;
+      if (!doctor || doctor.is_active === false
+        || !getDoctorDepartmentIds(doctor).some((departmentId) => activeDepartmentIds.has(departmentId))) return;
 
       const current = changesByDoctor.get(doctor.id) || {
         doctorId: doctor.id,
@@ -206,9 +215,10 @@ export default function App() {
   async function loadSupabaseData() {
     setLoading(true);
     try {
-      const [departmentResult, doctorResult, scheduleResult, consultResult] = await Promise.all([
+      const [departmentResult, doctorResult, doctorDepartmentResult, scheduleResult, consultResult] = await Promise.all([
         supabase.from("departments").select("*").order("name"),
         supabase.from("doctors").select("*").order("name"),
+        loadAllRelationshipRows(),
         loadAllTableRows("schedules"),
         loadAllTableRows("consult_assignments")
       ]);
@@ -217,10 +227,16 @@ export default function App() {
       if (doctorResult.error) throw doctorResult.error;
       if (scheduleResult.error) throw scheduleResult.error;
 
+      const loadedDoctors = attachDoctorDepartments(
+        doctorResult.data || [],
+        doctorDepartmentResult.error ? [] : doctorDepartmentResult.data || []
+      );
       setDepartments(departmentResult.data || []);
-      setDoctors(doctorResult.data || []);
+      setDoctors(loadedDoctors);
       setSchedules(scheduleResult.data || []);
-      if (consultResult.error) {
+      if (doctorDepartmentResult.error) {
+        setNotice("ยังไม่ได้ติดตั้งระบบแพทย์หลายแผนก กรุณารัน supabase/add-doctor-multiple-departments.sql");
+      } else if (consultResult.error) {
         setConsultAssignments([]);
         setNotice("ยังไม่ได้ติดตั้งตาราง Consult กรุณารัน supabase/add-consult-system.sql");
       } else {
@@ -241,6 +257,17 @@ export default function App() {
         .select("*")
         .order("date", { ascending: true })
         .order("id", { ascending: true })
+        .range(from, to)
+    ));
+  }
+
+  function loadAllRelationshipRows() {
+    return collectPaginatedRows((from, to) => (
+      supabase
+        .from("doctor_departments")
+        .select("doctor_id, department_id, is_primary")
+        .order("doctor_id", { ascending: true })
+        .order("department_id", { ascending: true })
         .range(from, to)
     ));
   }
@@ -323,9 +350,19 @@ export default function App() {
 
   async function createDoctor(payload) {
     if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
-    const preparedPayload = prepareDoctorPayload(payload);
+    const membership = normalizeDoctorDepartments(payload);
+    if (!membership.departmentIds.length) {
+      setNotice("กรุณาเลือกแผนกของแพทย์อย่างน้อยหนึ่งแผนก");
+      return null;
+    }
+    const preparedPayload = prepareDoctorPayload({ ...payload, department_id: membership.primaryDepartmentId });
     if (!hasSupabaseConfig) {
-      const created = { ...preparedPayload, id: crypto.randomUUID() };
+      const created = {
+        ...preparedPayload,
+        id: crypto.randomUUID(),
+        department_ids: membership.departmentIds,
+        primary_department_id: membership.primaryDepartmentId
+      };
       setDoctors((current) => [...current, created]);
       return created;
     }
@@ -334,8 +371,18 @@ export default function App() {
       setNotice(error.message);
       return null;
     }
-    setDoctors((current) => [...current, data]);
-    return data;
+    const relationshipError = await saveDoctorDepartments(data.id, membership);
+    if (relationshipError) {
+      setNotice(`สร้างแพทย์แล้วแต่บันทึกแผนกไม่สำเร็จ: ${relationshipError.message}`);
+      return null;
+    }
+    const created = attachDoctorDepartments([data], membership.departmentIds.map((departmentId) => ({
+      doctor_id: data.id,
+      department_id: departmentId,
+      is_primary: departmentId === membership.primaryDepartmentId
+    })))[0];
+    setDoctors((current) => [...current, created]);
+    return created;
   }
 
   async function importDoctorsFromExcel(rows) {
@@ -346,7 +393,7 @@ export default function App() {
 
     const departmentPool = [...departments];
     const doctorPool = [...doctors];
-    const summary = { departmentsCreated: 0, doctorsCreated: 0, doctorsSkipped: 0, failed: 0 };
+    const summary = { departmentsCreated: 0, doctorsCreated: 0, departmentLinksAdded: 0, doctorsSkipped: 0, failed: 0 };
 
     for (const row of rows) {
       let department = findImportDepartment(row, departmentPool);
@@ -370,12 +417,37 @@ export default function App() {
         continue;
       }
 
+      const existingDoctor = findImportedDoctor(row, doctorPool);
+      if (existingDoctor) {
+        const departmentIds = [...new Set([...getDoctorDepartmentIds(existingDoctor), department.id])];
+        const updatedDoctor = await updateDoctor(existingDoctor.id, {
+          name_th: existingDoctor.name_th || "",
+          name_en: existingDoctor.name_en || existingDoctor.name || "",
+          specialty_th: existingDoctor.specialty_th || row.specialty_th || "",
+          specialty_en: existingDoctor.specialty_en || existingDoctor.specialty || row.specialty_en || "",
+          image_url: existingDoctor.image_url || "",
+          is_active: existingDoctor.is_active !== false,
+          department_ids: departmentIds,
+          primary_department_id: existingDoctor.primary_department_id || existingDoctor.department_id || departmentIds[0]
+        });
+        if (!updatedDoctor) {
+          summary.failed += 1;
+          continue;
+        }
+        const doctorIndex = doctorPool.findIndex((doctor) => doctor.id === existingDoctor.id);
+        doctorPool[doctorIndex] = updatedDoctor;
+        summary.departmentLinksAdded += 1;
+        continue;
+      }
+
       const doctor = await createDoctor({
         name_th: row.doctor_th,
         name_en: row.doctor_en,
         specialty_th: row.specialty_th,
         specialty_en: row.specialty_en,
         department_id: department.id,
+        department_ids: [department.id],
+        primary_department_id: department.id,
         image_url: ""
       });
       if (!doctor) {
@@ -386,7 +458,7 @@ export default function App() {
       summary.doctorsCreated += 1;
     }
 
-    setNotice(`Import เสร็จแล้ว: เพิ่มแพทย์ ${summary.doctorsCreated} คน และแผนก ${summary.departmentsCreated} แผนก`);
+    setNotice(`Import เสร็จแล้ว: เพิ่มแพทย์ ${summary.doctorsCreated} คน, แผนก ${summary.departmentsCreated} แผนก และสังกัดเพิ่ม ${summary.departmentLinksAdded} รายการ`);
     return summary;
   }
 
@@ -395,20 +467,51 @@ export default function App() {
       setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
       return null;
     }
-    const preparedPayload = prepareDoctorPayload(payload);
+    const existingDoctor = doctors.find((doctor) => doctor.id === id);
+    const membership = normalizeDoctorDepartments({ ...existingDoctor, ...payload });
+    if (!membership.departmentIds.length) {
+      setNotice("กรุณาเลือกแผนกของแพทย์อย่างน้อยหนึ่งแผนก");
+      return null;
+    }
+    const preparedPayload = prepareDoctorPayload({ ...payload, department_id: membership.primaryDepartmentId });
     if (!hasSupabaseConfig) {
-      setDoctors((current) => current.map((doctor) => doctor.id === id ? { ...doctor, ...preparedPayload } : doctor));
+      const updated = {
+        ...preparedPayload,
+        id,
+        department_ids: membership.departmentIds,
+        primary_department_id: membership.primaryDepartmentId
+      };
+      setDoctors((current) => current.map((doctor) => doctor.id === id ? { ...doctor, ...updated } : doctor));
       setNotice("แก้ไขข้อมูลแพทย์แล้ว");
-      return { id, ...preparedPayload };
+      return updated;
     }
     const { data, error } = await supabase.from("doctors").update(preparedPayload).eq("id", id).select().single();
     if (error) {
       setNotice(error.message);
       return null;
     }
-    setDoctors((current) => current.map((doctor) => doctor.id === id ? data : doctor));
+    const relationshipError = await saveDoctorDepartments(id, membership);
+    if (relationshipError) {
+      setNotice(`บันทึกข้อมูลแพทย์แล้วแต่บันทึกแผนกไม่สำเร็จ: ${relationshipError.message}`);
+      return null;
+    }
+    const updated = attachDoctorDepartments([data], membership.departmentIds.map((departmentId) => ({
+      doctor_id: id,
+      department_id: departmentId,
+      is_primary: departmentId === membership.primaryDepartmentId
+    })))[0];
+    setDoctors((current) => current.map((doctor) => doctor.id === id ? updated : doctor));
     setNotice("แก้ไขข้อมูลแพทย์เรียบร้อย");
-    return data;
+    return updated;
+  }
+
+  async function saveDoctorDepartments(doctorId, membership) {
+    const { error } = await supabase.rpc("set_doctor_departments", {
+      p_doctor_id: doctorId,
+      p_department_ids: membership.departmentIds,
+      p_primary_department_id: membership.primaryDepartmentId
+    });
+    return error;
   }
 
   async function toggleDoctorActive(doctor) {
@@ -762,10 +865,11 @@ function prepareDepartmentPayload(payload) {
 }
 
 function prepareDoctorPayload(payload) {
-  if (!("name_th" in payload) && !("name_en" in payload)) return payload;
-  const name = payload.name_th?.trim() || payload.name_en?.trim() || payload.name || "";
-  const specialty = payload.specialty_th?.trim() || payload.specialty_en?.trim() || payload.specialty || "";
-  return { ...payload, name, specialty };
+  const { department_ids, primary_department_id, ...basePayload } = payload;
+  if (!("name_th" in basePayload) && !("name_en" in basePayload)) return basePayload;
+  const name = basePayload.name_th?.trim() || basePayload.name_en?.trim() || basePayload.name || "";
+  const specialty = basePayload.specialty_th?.trim() || basePayload.specialty_en?.trim() || basePayload.specialty || "";
+  return { ...basePayload, name, specialty };
 }
 
 function makeScheduleRow(doctorId, date) {

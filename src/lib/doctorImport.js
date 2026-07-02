@@ -56,10 +56,14 @@ export function findImportDepartment(row, departments) {
 }
 
 export function isImportedDoctorDuplicate(row, departmentId, doctors) {
+  const doctor = findImportedDoctor(row, doctors);
+  return Boolean(doctor && doctorBelongsToDepartment(doctor, departmentId));
+}
+
+export function findImportedDoctor(row, doctors) {
   const incomingNames = new Set([row.doctor_th, row.doctor_en].map(normalizeImportName).filter(Boolean));
-  return doctors.some((doctor) => (
-    doctor.department_id === departmentId
-    && [doctor.name_th, doctor.name_en, doctor.name]
+  return doctors.find((doctor) => (
+    [doctor.name_th, doctor.name_en, doctor.name]
       .map(normalizeImportName)
       .some((name) => name && incomingNames.has(name))
   ));
@@ -73,3 +77,4 @@ function cleanText(value) {
   if (value === null || value === undefined) return "";
   return String(value).trim();
 }
+import { doctorBelongsToDepartment } from "./doctorDepartments.js";

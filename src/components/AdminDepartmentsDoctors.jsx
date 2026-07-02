@@ -3,9 +3,19 @@ import { Icon } from "./icons";
 import { getLocalizedValue } from "../lib/i18n";
 import AdminDoctorImport from "./AdminDoctorImport";
 import { validateDoctorImage } from "../lib/doctorImage";
+import { getDoctorDepartmentIds } from "../lib/doctorDepartments";
 
 const emptyDepartment = { name_th: "", name_en: "", description_th: "", description_en: "" };
-const emptyDoctor = { name_th: "", name_en: "", specialty_th: "", specialty_en: "", department_id: "", image_url: "" };
+const emptyDoctor = {
+  name_th: "",
+  name_en: "",
+  specialty_th: "",
+  specialty_en: "",
+  department_id: "",
+  department_ids: [],
+  primary_department_id: "",
+  image_url: ""
+};
 
 export default function AdminDepartmentsDoctors({
   departments,
@@ -70,6 +80,10 @@ export default function AdminDepartmentsDoctors({
       setDoctorError("กรุณากรอกชื่อแพทย์อย่างน้อยหนึ่งภาษา");
       return;
     }
+    if (!doctorForm.department_ids.length) {
+      setDoctorError("กรุณาเลือกแผนกอย่างน้อยหนึ่งแผนก");
+      return;
+    }
     if (selectedFile) {
       const imageError = validateDoctorImage(selectedFile);
       if (imageError) {
@@ -101,6 +115,7 @@ export default function AdminDepartmentsDoctors({
   }
 
   function editDoctor(doctor) {
+    const departmentIds = getDoctorDepartmentIds(doctor);
     setEditingDoctorId(doctor.id);
     setDoctorForm({
       name_th: doctor.name_th || "",
@@ -108,6 +123,8 @@ export default function AdminDepartmentsDoctors({
       specialty_th: doctor.specialty_th || "",
       specialty_en: doctor.specialty_en || doctor.specialty || "",
       department_id: doctor.department_id || "",
+      department_ids: departmentIds,
+      primary_department_id: doctor.primary_department_id || doctor.department_id || departmentIds[0] || "",
       image_url: doctor.image_url || ""
     });
     setSelectedFile(null);
@@ -118,6 +135,24 @@ export default function AdminDepartmentsDoctors({
     setDoctorForm(emptyDoctor);
     setSelectedFile(null);
     setDoctorError("");
+  }
+
+  function toggleDoctorDepartment(departmentId) {
+    setDoctorForm((form) => {
+      const isSelected = form.department_ids.includes(departmentId);
+      const departmentIds = isSelected
+        ? form.department_ids.filter((id) => id !== departmentId)
+        : [...form.department_ids, departmentId];
+      const primaryDepartmentId = departmentIds.includes(form.primary_department_id)
+        ? form.primary_department_id
+        : departmentIds[0] || "";
+      return {
+        ...form,
+        department_id: primaryDepartmentId,
+        department_ids: departmentIds,
+        primary_department_id: primaryDepartmentId
+      };
+    });
   }
 
   return (
@@ -207,19 +242,39 @@ export default function AdminDepartmentsDoctors({
             placeholder={doctorLanguage === "th" ? "ความเชี่ยวชาญ" : "Specialty"}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
           />
-          <select
-            required
-            value={doctorForm.department_id}
-            onChange={(event) => setDoctorForm((form) => ({ ...form, department_id: event.target.value }))}
-            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
-          >
-            <option value="">เลือกแผนก</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {getLocalizedValue(department, "name", "th")}{department.is_active === false ? " (ปิดใช้งาน)" : ""}
-              </option>
-            ))}
-          </select>
+          <fieldset className="rounded-xl border border-slate-200 p-3 md:col-span-2">
+            <legend className="px-1 text-sm font-semibold text-slate-700">แผนกที่สังกัด</legend>
+            <p className="mb-3 text-xs text-slate-500">เลือกได้หลายแผนก และกำหนดแผนกหลักหนึ่งแห่ง</p>
+            <div className="grid max-h-52 gap-2 overflow-auto sm:grid-cols-2">
+              {departments.map((department) => {
+                const checked = doctorForm.department_ids.includes(department.id);
+                const departmentName = getLocalizedValue(department, "name", "th");
+                return (
+                  <div key={department.id} className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${checked ? "border-hospital-300 bg-hospital-50" : "border-slate-100"}`}>
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDoctorDepartment(department.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-hospital-600"
+                      />
+                      <span className="truncate">{departmentName}{department.is_active === false ? " (ปิดใช้งาน)" : ""}</span>
+                    </label>
+                    <label className={`flex items-center gap-1 text-xs font-semibold ${checked ? "text-hospital-700" : "text-slate-300"}`}>
+                      <input
+                        type="radio"
+                        name="primary-doctor-department"
+                        checked={doctorForm.primary_department_id === department.id}
+                        disabled={!checked}
+                        onChange={() => setDoctorForm((form) => ({ ...form, department_id: department.id, primary_department_id: department.id }))}
+                      />
+                      หลัก
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </fieldset>
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-500 hover:border-hospital-400 hover:text-hospital-700">
             <Icon name="upload" />
             {selectedFile ? selectedFile.name : editingDoctorId ? "เปลี่ยนรูป (ไม่บังคับ)" : "อัปโหลดรูป"}
@@ -242,6 +297,9 @@ export default function AdminDepartmentsDoctors({
           {doctors.map((doctor) => {
             const active = doctor.is_active !== false;
             const doctorName = getLocalizedValue(doctor, "name", "th");
+            const departmentNames = getDoctorDepartmentIds(doctor)
+              .map((departmentId) => getLocalizedValue(departments.find((department) => department.id === departmentId), "name", "th"))
+              .filter(Boolean);
             return (
               <div key={doctor.id} className={`flex items-center gap-3 rounded-2xl border border-slate-100 p-3 ${active ? "" : "bg-slate-50 opacity-60"}`}>
                 <img
@@ -256,6 +314,7 @@ export default function AdminDepartmentsDoctors({
                     {!doctor.name_en && <MissingEnglishBadge />}
                   </div>
                   <p className="truncate text-sm text-slate-500">{getLocalizedValue(doctor, "specialty", "th")}</p>
+                  <p className="truncate text-xs text-hospital-700">{departmentNames.join(", ") || "ยังไม่มีแผนก"}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <IconButton label={`แก้ไข ${doctorName}`} icon="edit" onClick={() => editDoctor(doctor)} />

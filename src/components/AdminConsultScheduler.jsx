@@ -5,6 +5,7 @@ import { toISODate } from "../lib/date";
 import { exportTableToExcel } from "../lib/excelExport";
 import { getLocalizedValue } from "../lib/i18n";
 import { Icon } from "./icons";
+import { doctorBelongsToDepartment } from "../lib/doctorDepartments";
 
 export default function AdminConsultScheduler({ departments, doctors, assignments, onSave }) {
   const [selectedDate, setSelectedDate] = useState(toISODate(new Date()));
@@ -43,6 +44,13 @@ export default function AdminConsultScheduler({ departments, doctors, assignment
       ...current,
       [key]: { date: selectedDate, department_id: departmentId, shift_key: shiftKey, doctor_id: doctorId }
     }));
+  }
+
+  function isDoctorAssignedElsewhere(doctorId, departmentId, shiftKey) {
+    if (!doctorId) return false;
+    return departments.some((department) => (
+      department.id !== departmentId && getDoctorId(department.id, shiftKey) === doctorId
+    ));
   }
 
   async function saveChanges() {
@@ -195,7 +203,7 @@ export default function AdminConsultScheduler({ departments, doctors, assignment
           </thead>
           <tbody className="divide-y divide-slate-100">
             {visibleDepartments.map((department) => {
-              const departmentDoctors = doctors.filter((doctor) => doctor.department_id === department.id);
+              const departmentDoctors = doctors.filter((doctor) => doctorBelongsToDepartment(doctor, department.id));
               return (
                 <tr key={department.id}>
                   <td className="px-4 py-4 font-semibold text-slate-950">{department.name}</td>
@@ -210,7 +218,13 @@ export default function AdminConsultScheduler({ departments, doctors, assignment
                         >
                           <option value="">ไม่มีแพทย์ Consult</option>
                           {departmentDoctors.map((doctor) => (
-                            <option key={doctor.id} value={doctor.id}>{doctor.name}</option>
+                            <option
+                              key={doctor.id}
+                              value={doctor.id}
+                              disabled={isDoctorAssignedElsewhere(doctor.id, department.id, shift.key)}
+                            >
+                              {doctor.name}{isDoctorAssignedElsewhere(doctor.id, department.id, shift.key) ? " (ติด Consult แผนกอื่น)" : ""}
+                            </option>
                           ))}
                         </select>
                       </td>

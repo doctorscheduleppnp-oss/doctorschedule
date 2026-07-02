@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import DoctorCard from "./DoctorCard";
 import { hourKeys, toISODate } from "../lib/date";
 import { formatLocalizedDate, getLocalizedValue, translations } from "../lib/i18n";
+import { doctorBelongsToDepartment } from "../lib/doctorDepartments";
 
 export default function PublicDashboard({
   departments,
@@ -20,7 +21,7 @@ export default function PublicDashboard({
   );
 
   const visibleDoctors = doctors.filter((doctor) => {
-    const departmentMatch = selectedDepartmentId === "all" || doctor.department_id === selectedDepartmentId;
+    const departmentMatch = selectedDepartmentId === "all" || doctorBelongsToDepartment(doctor, selectedDepartmentId);
     const hasToday = hourKeys.some((key) => todayByDoctor[doctor.id]?.[key]);
     return departmentMatch && hasToday;
   });

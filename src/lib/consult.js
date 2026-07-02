@@ -1,4 +1,5 @@
 import { toISODate } from "./date";
+import { doctorBelongsToDepartment } from "./doctorDepartments";
 
 export const CONSULT_SHIFTS = [
   { key: "day", label: "07:00-17:00", description: "เวรกลางวัน", startHour: 7, endHour: 17 },
@@ -10,7 +11,7 @@ export function buildSampleConsultAssignments(departments, doctors, date = new D
   const assignmentDate = toISODate(date);
 
   return departments.flatMap((department, departmentIndex) => {
-    const departmentDoctors = doctors.filter((doctor) => doctor.department_id === department.id);
+    const departmentDoctors = doctors.filter((doctor) => doctorBelongsToDepartment(doctor, department.id));
 
     return CONSULT_SHIFTS.map((shift, shiftIndex) => ({
       id: `sample-${department.id}-${shift.key}`,

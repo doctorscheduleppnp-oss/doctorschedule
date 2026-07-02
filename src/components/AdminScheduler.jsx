@@ -4,6 +4,7 @@ import { exportTableToExcel } from "../lib/excelExport";
 import { getLocalizedValue } from "../lib/i18n";
 import { getChangedScheduleRows, mergeScheduleDraftRows } from "../lib/scheduleDrafts";
 import { Icon } from "./icons";
+import { getDoctorDepartmentIds } from "../lib/doctorDepartments";
 
 export default function AdminScheduler({ departments, doctors, schedules, onSaveSchedules, onCopyMonth, canExport = false }) {
   const [selectedDoctorId, setSelectedDoctorId] = useState(doctors[0]?.id || "");
@@ -14,7 +15,9 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
   const dragValueRef = useRef(null);
 
   const selectedDoctor = doctors.find((doctor) => doctor.id === selectedDoctorId);
-  const selectedDepartment = departments.find((department) => department.id === selectedDoctor?.department_id);
+  const selectedDepartment = departments.find((department) => (
+    department.id === (selectedDoctor?.primary_department_id || selectedDoctor?.department_id || getDoctorDepartmentIds(selectedDoctor)[0])
+  ));
   const weekDays = useMemo(() => getWeekDays(new Date(`${weekStart}T00:00:00`)), [weekStart]);
 
   useEffect(() => {
