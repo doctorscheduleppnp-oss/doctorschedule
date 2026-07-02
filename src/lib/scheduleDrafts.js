@@ -1,5 +1,12 @@
 import { hourKeys, makeEmptySchedule } from "./date.js";
 
+export function mergeScheduleDraftRows(currentDrafts, rows) {
+  return {
+    ...currentDrafts,
+    ...Object.fromEntries(rows.map((row) => [row.date, row]))
+  };
+}
+
 export function getChangedScheduleRows(draftSchedules, savedSchedules, doctorId) {
   if (!doctorId) return [];
 

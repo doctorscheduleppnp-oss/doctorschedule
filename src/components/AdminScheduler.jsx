@@ -2,7 +2,7 @@ import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { formatThaiDate, getStartOfWeek, getWeekDays, hourKeys, makeEmptySchedule, toISODate } from "../lib/date";
 import { exportTableToExcel } from "../lib/excelExport";
 import { getLocalizedValue } from "../lib/i18n";
-import { getChangedScheduleRows } from "../lib/scheduleDrafts";
+import { getChangedScheduleRows, mergeScheduleDraftRows } from "../lib/scheduleDrafts";
 import { Icon } from "./icons";
 
 export default function AdminScheduler({ departments, doctors, schedules, onSaveSchedules, onCopyMonth, canExport = false }) {
@@ -88,10 +88,7 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
         ...Object.fromEntries(hourKeys.map((hour) => [hour, source[hour]]))
       };
     });
-    setDraftSchedules((current) => ({
-      ...current,
-      ...Object.fromEntries(nextWeekRows.map((row) => [`${row.doctor_id}-${row.date}`, row]))
-    }));
+    setDraftSchedules((current) => mergeScheduleDraftRows(current, nextWeekRows));
     setWeekStart(nextWeekRows[0].date);
   }
 
@@ -99,10 +96,7 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
     if (!selectedDoctorId) return;
     const nextMonthRows = await onCopyMonth(selectedDoctorId, new Date(`${weekStart}T00:00:00`));
     if (!nextMonthRows?.length) return;
-    setDraftSchedules((current) => ({
-      ...current,
-      ...Object.fromEntries(nextMonthRows.map((row) => [`${row.doctor_id}-${row.date}`, row]))
-    }));
+    setDraftSchedules((current) => mergeScheduleDraftRows(current, nextMonthRows));
     setWeekStart(toISODate(getStartOfWeek(new Date(`${nextMonthRows[0].date}T00:00:00`))));
   }
 
