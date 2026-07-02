@@ -88,12 +88,22 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
         ...Object.fromEntries(hourKeys.map((hour) => [hour, source[hour]]))
       };
     });
-    await onSaveSchedules(nextWeekRows);
+    setDraftSchedules((current) => ({
+      ...current,
+      ...Object.fromEntries(nextWeekRows.map((row) => [`${row.doctor_id}-${row.date}`, row]))
+    }));
+    setWeekStart(nextWeekRows[0].date);
   }
 
   async function copyMonthToNextMonth() {
     if (!selectedDoctorId) return;
-    await onCopyMonth(selectedDoctorId, new Date(`${weekStart}T00:00:00`));
+    const nextMonthRows = await onCopyMonth(selectedDoctorId, new Date(`${weekStart}T00:00:00`));
+    if (!nextMonthRows?.length) return;
+    setDraftSchedules((current) => ({
+      ...current,
+      ...Object.fromEntries(nextMonthRows.map((row) => [`${row.doctor_id}-${row.date}`, row]))
+    }));
+    setWeekStart(toISODate(getStartOfWeek(new Date(`${nextMonthRows[0].date}T00:00:00`))));
   }
 
   const exportRows = useMemo(() => {

@@ -470,7 +470,10 @@ export default function App() {
   }
 
   async function copyMonthToNextMonth(doctorId, anchorDate) {
-    if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการตารางเวร");
+    if (hasSupabaseConfig && !canManage) {
+      setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการตารางเวร");
+      return [];
+    }
 
     const sourceYear = anchorDate.getFullYear();
     const sourceMonth = anchorDate.getMonth();
@@ -487,7 +490,8 @@ export default function App() {
     });
 
     if (!sourceRows.length) {
-      return setNotice("ไม่พบตารางของแพทย์คนนี้ในเดือนที่เลือก");
+      setNotice("ไม่พบตารางของแพทย์คนนี้ในเดือนที่เลือก");
+      return [];
     }
 
     const sourceRowsByDate = new Map(sourceRows.map((row) => [row.date, row]));
@@ -519,8 +523,8 @@ export default function App() {
       });
     }
 
-    await saveSchedules(rowsForNextMonth);
-    setNotice(`คัดลอกตาราง ${rowsForNextMonth.length} วัน ไปเดือนถัดไปแล้ว`);
+    setNotice(`เตรียมตาราง ${rowsForNextMonth.length} วัน สำหรับเดือนถัดไปแล้ว กรุณากด Save Changes`);
+    return rowsForNextMonth;
   }
 
   async function saveConsultAssignments(rows) {
