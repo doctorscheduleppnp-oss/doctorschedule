@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { formatThaiDate, getStartOfWeek, getWeekDays, hourKeys, makeEmptySchedule, toISODate } from "../lib/date";
 import { exportTableToExcel } from "../lib/excelExport";
 import { getLocalizedValue } from "../lib/i18n";
+import { getChangedScheduleRows } from "../lib/scheduleDrafts";
 import { Icon } from "./icons";
 
 export default function AdminScheduler({ departments, doctors, schedules, onSaveSchedules, onCopyMonth, canExport = false }) {
@@ -37,6 +38,10 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
       });
     return map;
   }, [schedules, selectedDoctorId]);
+  const changedRows = useMemo(
+    () => getChangedScheduleRows(draftSchedules, schedules, selectedDoctorId),
+    [draftSchedules, schedules, selectedDoctorId]
+  );
 
   function getSchedule(date) {
     const key = toISODate(date);
@@ -67,13 +72,9 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
   }
 
   async function saveChanges() {
-    if (!selectedDoctorId) return;
-    const rows = Object.values(draftSchedules).filter((draft) => {
-      const saved = scheduleMap[draft.date] || makeEmptySchedule(selectedDoctorId, new Date(`${draft.date}T00:00:00`));
-      return hourKeys.some((hour) => Boolean(draft[hour]) !== Boolean(saved[hour]));
-    });
-    await onSaveSchedules(rows);
-    setDraftSchedules({});
+    if (!selectedDoctorId || !changedRows.length) return;
+    const saved = await onSaveSchedules(changedRows);
+    if (saved) setDraftSchedules({});
   }
 
   async function copyToNextWeek() {
@@ -164,21 +165,21 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
           </select>
           <input
             type="date"
+            aria-label="เลือกสัปดาห์"
             value={weekStart}
             onChange={(event) => {
               setWeekStart(toISODate(getStartOfWeek(new Date(`${event.target.value}T00:00:00`))));
-              setDraftSchedules({});
             }}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
           />
           <button
             type="button"
             onClick={saveChanges}
-            disabled={!selectedDoctorId}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-hospital-700"
+            disabled={!selectedDoctorId || !changedRows.length}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-hospital-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Icon name="save" />
-            Save Changes
+            {changedRows.length ? `Save Changes (${changedRows.length} วัน)` : "Save Changes"}
           </button>
         </div>
       </div>
@@ -186,6 +187,7 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
       <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <p className="text-sm text-slate-500">
           แพทย์: <span className="font-semibold text-slate-900">{selectedDoctor?.name || "-"}</span>
+          {changedRows.length ? <span className="ml-3 font-semibold text-amber-700">ยังไม่ได้บันทึก {changedRows.length} วัน</span> : null}
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <button

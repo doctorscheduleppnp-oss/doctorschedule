@@ -14,6 +14,7 @@ import { buildSampleSchedules, sampleDepartments, sampleDoctors } from "./lib/sa
 import { getStartOfWeek, getWeekDays, hourKeys, toISODate } from "./lib/date";
 import { getInitialLanguage, LANGUAGE_STORAGE_KEY, translations } from "./lib/i18n";
 import { findImportDepartment, isImportedDoctorDuplicate } from "./lib/doctorImport";
+import { makeDoctorImagePath, validateDoctorImage } from "./lib/doctorImage";
 
 const baseTabs = [
   { id: "public" },
@@ -281,18 +282,28 @@ export default function App() {
   async function uploadDoctorImage(file) {
     if (hasSupabaseConfig && !canManage) {
       setNotice("บัญชีนี้ไม่มีสิทธิ์อัปโหลดรูป");
-      return "";
+      return null;
     }
     if (!hasSupabaseConfig) return URL.createObjectURL(file);
 
-    const path = `${crypto.randomUUID()}-${file.name}`;
+    const validationError = validateDoctorImage(file);
+    if (validationError) {
+      setNotice(validationError);
+      return null;
+    }
+
+    const path = makeDoctorImagePath(file);
     const { error } = await supabase.storage.from("doctor-images").upload(path, file, {
       cacheControl: "3600",
+      contentType: file.type,
       upsert: false
     });
     if (error) {
-      setNotice(error.message);
-      return "";
+      const setupHint = /bucket not found|row-level security|policy/i.test(error.message)
+        ? " กรุณาติดตั้ง Storage ด้วยไฟล์ supabase/add-doctor-image-storage.sql"
+        : "";
+      setNotice(`อัปโหลดรูปไม่สำเร็จ: ${error.message}${setupHint}`);
+      return null;
     }
     const { data } = supabase.storage.from("doctor-images").getPublicUrl(path);
     return data.publicUrl;
@@ -368,17 +379,24 @@ export default function App() {
   }
 
   async function updateDoctor(id, payload) {
-    if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
+    if (hasSupabaseConfig && !canManage) {
+      setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูล");
+      return null;
+    }
     const preparedPayload = prepareDoctorPayload(payload);
     if (!hasSupabaseConfig) {
       setDoctors((current) => current.map((doctor) => doctor.id === id ? { ...doctor, ...preparedPayload } : doctor));
       setNotice("แก้ไขข้อมูลแพทย์แล้ว");
-      return;
+      return { id, ...preparedPayload };
     }
     const { data, error } = await supabase.from("doctors").update(preparedPayload).eq("id", id).select().single();
-    if (error) return setNotice(error.message);
+    if (error) {
+      setNotice(error.message);
+      return null;
+    }
     setDoctors((current) => current.map((doctor) => doctor.id === id ? data : doctor));
     setNotice("แก้ไขข้อมูลแพทย์เรียบร้อย");
+    return data;
   }
 
   async function toggleDoctorActive(doctor) {
@@ -398,8 +416,14 @@ export default function App() {
   }
 
   async function saveSchedules(rows) {
-    if (hasSupabaseConfig && !canManage) return setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการตารางเวร");
-    if (!rows.length) return setNotice("ไม่มีการเปลี่ยนแปลงใหม่ให้บันทึก");
+    if (hasSupabaseConfig && !canManage) {
+      setNotice("บัญชีนี้ไม่มีสิทธิ์จัดการตารางเวร");
+      return false;
+    }
+    if (!rows.length) {
+      setNotice("ไม่มีการเปลี่ยนแปลงใหม่ให้บันทึก");
+      return false;
+    }
 
     const cleanedRows = rows.map((row) => ({
       doctor_id: row.doctor_id,
@@ -421,7 +445,7 @@ export default function App() {
         ];
       });
       setNotice("บันทึกลง demo state แล้ว");
-      return;
+      return true;
     }
 
     const { data, error } = await supabase
@@ -429,7 +453,10 @@ export default function App() {
       .upsert(cleanedRows, { onConflict: "doctor_id,date" })
       .select();
 
-    if (error) return setNotice(error.message);
+    if (error) {
+      setNotice(error.message);
+      return false;
+    }
 
     setSchedules((current) => {
       const incomingKeys = new Set(data.map((row) => `${row.doctor_id}-${row.date}`));
@@ -439,6 +466,7 @@ export default function App() {
       ];
     });
     setNotice("บันทึกตารางเวรเรียบร้อย");
+    return true;
   }
 
   async function copyMonthToNextMonth(doctorId, anchorDate) {
@@ -496,8 +524,14 @@ export default function App() {
   }
 
   async function saveConsultAssignments(rows) {
-    if (!isAdmin) return setNotice("เฉพาะ Admin เท่านั้นที่จัดตาราง Consult ได้");
-    if (!rows.length) return setNotice("ไม่มีการเปลี่ยนแปลงตาราง Consult ให้บันทึก");
+    if (!isAdmin) {
+      setNotice("เฉพาะ Admin เท่านั้นที่จัดตาราง Consult ได้");
+      return false;
+    }
+    if (!rows.length) {
+      setNotice("ไม่มีการเปลี่ยนแปลงตาราง Consult ให้บันทึก");
+      return false;
+    }
 
     if (!hasSupabaseConfig) {
       setConsultAssignments((current) => {
@@ -513,7 +547,7 @@ export default function App() {
         ];
       });
       setNotice("บันทึกตาราง Consult ใน demo mode แล้ว");
-      return;
+      return true;
     }
 
     const { data, error } = await supabase
@@ -521,7 +555,10 @@ export default function App() {
       .upsert(rows, { onConflict: "department_id,date,shift_key" })
       .select();
 
-    if (error) return setNotice(error.message);
+    if (error) {
+      setNotice(error.message);
+      return false;
+    }
 
     setConsultAssignments((current) => {
       const incomingKeys = new Set(data.map((row) => `${row.department_id}-${row.date}-${row.shift_key}`));
@@ -531,6 +568,7 @@ export default function App() {
       ];
     });
     setNotice("บันทึกตาราง Consult เรียบร้อย");
+    return true;
   }
 
   async function signIn({ email, password }) {

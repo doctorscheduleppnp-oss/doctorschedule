@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Icon } from "./icons";
 import { getLocalizedValue } from "../lib/i18n";
 import AdminDoctorImport from "./AdminDoctorImport";
+import { validateDoctorImage } from "../lib/doctorImage";
 
 const emptyDepartment = { name_th: "", name_en: "", description_th: "", description_en: "" };
 const emptyDoctor = { name_th: "", name_en: "", specialty_th: "", specialty_en: "", department_id: "", image_url: "" };
@@ -28,6 +29,7 @@ export default function AdminDepartmentsDoctors({
   const [doctorError, setDoctorError] = useState("");
   const [editingDoctorId, setEditingDoctorId] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [isSavingDoctor, setIsSavingDoctor] = useState(false);
 
   async function submitDepartment(event) {
     event.preventDefault();
@@ -68,17 +70,34 @@ export default function AdminDepartmentsDoctors({
       setDoctorError("กรุณากรอกชื่อแพทย์อย่างน้อยหนึ่งภาษา");
       return;
     }
-    setDoctorError("");
-    let imageUrl = doctorForm.image_url;
-    if (selectedFile) imageUrl = await onUploadDoctorImage(selectedFile);
-
-    const payload = { ...doctorForm, image_url: imageUrl };
-    if (editingDoctorId) {
-      await onUpdateDoctor(editingDoctorId, payload);
-    } else {
-      await onCreateDoctor(payload);
+    if (selectedFile) {
+      const imageError = validateDoctorImage(selectedFile);
+      if (imageError) {
+        setDoctorError(imageError);
+        return;
+      }
     }
-    resetDoctorForm();
+
+    setDoctorError("");
+    setIsSavingDoctor(true);
+    try {
+      let imageUrl = doctorForm.image_url;
+      if (selectedFile) {
+        imageUrl = await onUploadDoctorImage(selectedFile);
+        if (!imageUrl) {
+          setDoctorError("อัปโหลดรูปไม่สำเร็จ กรุณาตรวจข้อความแจ้งเตือนด้านบนแล้วลองอีกครั้ง");
+          return;
+        }
+      }
+
+      const payload = { ...doctorForm, image_url: imageUrl };
+      const savedDoctor = editingDoctorId
+        ? await onUpdateDoctor(editingDoctorId, payload)
+        : await onCreateDoctor(payload);
+      if (savedDoctor) resetDoctorForm();
+    } finally {
+      setIsSavingDoctor(false);
+    }
   }
 
   function editDoctor(doctor) {
@@ -207,9 +226,9 @@ export default function AdminDepartmentsDoctors({
             <input type="file" accept="image/*" className="hidden" onChange={(event) => setSelectedFile(event.target.files?.[0])} />
           </label>
           <div className="flex gap-2 md:col-span-2">
-            <button className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white">
+            <button disabled={isSavingDoctor} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60">
               <Icon name={editingDoctorId ? "save" : "plus"} />
-              {editingDoctorId ? "บันทึกการแก้ไข" : "เพิ่มแพทย์"}
+              {isSavingDoctor ? "กำลังบันทึก..." : editingDoctorId ? "บันทึกการแก้ไข" : "เพิ่มแพทย์"}
             </button>
             {editingDoctorId && (
               <button type="button" onClick={resetDoctorForm} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">

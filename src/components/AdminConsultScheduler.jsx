@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { CONSULT_SHIFTS } from "../lib/consult";
+import { getChangedConsultRows, makeConsultDraftKey } from "../lib/consultDrafts";
 import { toISODate } from "../lib/date";
 import { exportTableToExcel } from "../lib/excelExport";
 import { getLocalizedValue } from "../lib/i18n";
@@ -25,37 +26,28 @@ export default function AdminConsultScheduler({ departments, doctors, assignment
     return map;
   }, [assignments, selectedDate]);
 
+  const changedRows = useMemo(
+    () => getChangedConsultRows(draft, assignments),
+    [draft, assignments]
+  );
+
   function getDoctorId(departmentId, shiftKey) {
-    const key = `${departmentId}-${shiftKey}`;
-    if (Object.prototype.hasOwnProperty.call(draft, key)) return draft[key];
-    return assignmentMap[key]?.doctor_id || "";
+    const key = makeConsultDraftKey(selectedDate, departmentId, shiftKey);
+    if (Object.prototype.hasOwnProperty.call(draft, key)) return draft[key].doctor_id || "";
+    return assignmentMap[`${departmentId}-${shiftKey}`]?.doctor_id || "";
   }
 
   function updateAssignment(departmentId, shiftKey, doctorId) {
-    const key = `${departmentId}-${shiftKey}`;
-    setDraft((current) => ({ ...current, [key]: doctorId }));
+    const key = makeConsultDraftKey(selectedDate, departmentId, shiftKey);
+    setDraft((current) => ({
+      ...current,
+      [key]: { date: selectedDate, department_id: departmentId, shift_key: shiftKey, doctor_id: doctorId }
+    }));
   }
 
   async function saveChanges() {
-    const rows = Object.entries(draft)
-      .map(([key, doctorId]) => {
-        const separatorIndex = key.lastIndexOf("-");
-        const departmentId = key.slice(0, separatorIndex);
-        const shiftKey = key.slice(separatorIndex + 1);
-        const savedDoctorId = assignmentMap[key]?.doctor_id || "";
-        if (savedDoctorId === doctorId) return null;
-
-        return {
-          department_id: departmentId,
-          doctor_id: doctorId || null,
-          date: selectedDate,
-          shift_key: shiftKey
-        };
-      })
-      .filter(Boolean);
-
-    await onSave(rows);
-    setDraft({});
+    const saved = await onSave(changedRows);
+    if (saved) setDraft({});
   }
 
   const emptySlotCount = departments.reduce(
@@ -130,24 +122,28 @@ export default function AdminConsultScheduler({ departments, doctors, assignment
           </select>
           <input
             type="date"
+            aria-label="เลือกวันที่ Consult"
             value={selectedDate}
-            onChange={(event) => {
-              setSelectedDate(event.target.value);
-              setDraft({});
-            }}
+            onChange={(event) => setSelectedDate(event.target.value)}
             className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
           />
           <button
             type="button"
             onClick={saveChanges}
-            disabled={!Object.keys(draft).length}
+            disabled={!changedRows.length}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-hospital-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon name="save" />
-            Save Changes
+            {changedRows.length ? `Save Changes (${changedRows.length} เวร)` : "Save Changes"}
           </button>
         </div>
       </div>
+
+      {changedRows.length > 0 && (
+        <p className="mt-3 text-sm font-medium text-amber-700">
+          ยังไม่ได้บันทึก {changedRows.length} เวร จากหลายวันที่เลือกไว้
+        </p>
+      )}
 
       <div className={`mt-5 rounded-xl border px-4 py-3 text-sm font-medium ${emptySlotCount ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}>
         {emptySlotCount
