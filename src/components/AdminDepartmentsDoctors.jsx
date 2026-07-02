@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Icon } from "./icons";
 import { getLocalizedValue } from "../lib/i18n";
 import AdminDoctorImport from "./AdminDoctorImport";
@@ -40,6 +40,20 @@ export default function AdminDepartmentsDoctors({
   const [editingDoctorId, setEditingDoctorId] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isSavingDoctor, setIsSavingDoctor] = useState(false);
+
+  useEffect(() => {
+    if (!editingDoctorId) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape" && !isSavingDoctor) resetDoctorForm();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [editingDoctorId, isSavingDoctor]);
 
   async function submitDepartment(event) {
     event.preventDefault();
@@ -158,6 +172,14 @@ export default function AdminDepartmentsDoctors({
   return (
     <>
       {canImport ? <AdminDoctorImport onImport={onImportDoctors} /> : null}
+      {editingDoctorId ? (
+        <button
+          type="button"
+          aria-label="ปิดหน้าต่างแก้ไขแพทย์"
+          onClick={() => { if (!isSavingDoctor) resetDoctorForm(); }}
+          className="fixed inset-0 z-40 cursor-default bg-slate-950/40 backdrop-blur-sm"
+        />
+      ) : null}
       <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -220,12 +242,31 @@ export default function AdminDepartmentsDoctors({
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-slate-950">จัดการแพทย์</h2>
-          {editingDoctorId && <span className="text-xs font-semibold text-hospital-700">กำลังแก้ไข</span>}
+      <div className={editingDoctorId
+        ? "fixed inset-y-0 right-0 z-50 flex w-full flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl sm:w-[min(92vw,620px)]"
+        : "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"}
+        role={editingDoctorId ? "dialog" : undefined}
+        aria-modal={editingDoctorId ? "true" : undefined}
+        aria-labelledby={editingDoctorId ? "doctor-edit-drawer-title" : undefined}
+      >
+        <div className={`flex items-center justify-between gap-3 ${editingDoctorId ? "shrink-0 border-b border-slate-200 px-5 py-4" : ""}`}>
+          <div>
+            <p className={`text-xs font-semibold text-hospital-700 ${editingDoctorId ? "" : "hidden"}`}>แก้ไขข้อมูลแพทย์</p>
+            <h2 id={editingDoctorId ? "doctor-edit-drawer-title" : undefined} className="text-xl font-semibold text-slate-950">{editingDoctorId ? getLocalizedValue(doctorForm, "name", "th") || "แพทย์" : "จัดการแพทย์"}</h2>
+          </div>
+          {editingDoctorId ? (
+            <button
+              type="button"
+              aria-label="ปิดหน้าต่างแก้ไขแพทย์"
+              disabled={isSavingDoctor}
+              onClick={resetDoctorForm}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              ปิด
+            </button>
+          ) : null}
         </div>
-        <form onSubmit={submitDoctor} className="mt-4 grid gap-3 md:grid-cols-2">
+        <form onSubmit={submitDoctor} className={`${editingDoctorId ? "min-h-0 flex-1 overflow-y-auto px-5 py-4" : "mt-4"} grid gap-3 md:grid-cols-2`}>
           <div className="md:col-span-2">
             <LanguageTabs value={doctorLanguage} onChange={setDoctorLanguage} />
             {doctorError && <p className="mt-2 text-sm font-medium text-rose-600">{doctorError}</p>}
@@ -280,7 +321,7 @@ export default function AdminDepartmentsDoctors({
             {selectedFile ? selectedFile.name : editingDoctorId ? "เปลี่ยนรูป (ไม่บังคับ)" : "อัปโหลดรูป"}
             <input type="file" accept="image/*" className="hidden" onChange={(event) => setSelectedFile(event.target.files?.[0])} />
           </label>
-          <div className="flex gap-2 md:col-span-2">
+          <div className={`flex gap-2 md:col-span-2 ${editingDoctorId ? "sticky bottom-0 -mx-5 -mb-4 mt-3 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-8px_20px_rgba(15,23,42,0.06)]" : ""}`}>
             <button disabled={isSavingDoctor} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60">
               <Icon name={editingDoctorId ? "save" : "plus"} />
               {isSavingDoctor ? "กำลังบันทึก..." : editingDoctorId ? "บันทึกการแก้ไข" : "เพิ่มแพทย์"}
@@ -293,7 +334,7 @@ export default function AdminDepartmentsDoctors({
           </div>
         </form>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {!editingDoctorId ? <div className="mt-5 grid gap-3 sm:grid-cols-2">
           {doctors.map((doctor) => {
             const active = doctor.is_active !== false;
             const doctorName = getLocalizedValue(doctor, "name", "th");
@@ -328,7 +369,7 @@ export default function AdminDepartmentsDoctors({
               </div>
             );
           })}
-        </div>
+        </div> : null}
       </div>
       </section>
     </>
