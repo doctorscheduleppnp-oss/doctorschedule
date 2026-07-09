@@ -12,7 +12,8 @@ export default function PublicDashboard({
   selectedDepartmentId,
   setSelectedDepartmentId,
   onOpenWeekly,
-  language
+  language,
+  isLoading = false
 }) {
   const copy = translations[language];
   const today = toISODate(new Date());
@@ -47,10 +48,21 @@ export default function PublicDashboard({
         </label>
       </div>
 
-      <WeeklyChangeNote changes={weeklyChanges} language={language} />
+      {isLoading ? (
+        <div className="mt-5 rounded-2xl border border-cyan-200 bg-cyan-50 p-6 text-center text-cyan-900">
+          <p className="font-semibold">
+            {language === "th" ? "กำลังเตรียมข้อมูลตารางแพทย์" : "Preparing doctor schedule"}
+          </p>
+          <p className="mt-1 text-sm text-cyan-800">
+            {language === "th" ? "กรุณารอสักครู่ ระบบกำลังโหลดข้อมูลล่าสุด" : "Please wait while the latest data is loading."}
+          </p>
+        </div>
+      ) : (
+        <WeeklyChangeNote changes={weeklyChanges} language={language} />
+      )}
 
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleDoctors.map((doctor) => (
+        {!isLoading && visibleDoctors.map((doctor) => (
           <DoctorCard
             key={doctor.id}
             doctor={doctor}
@@ -59,7 +71,7 @@ export default function PublicDashboard({
             language={language}
           />
         ))}
-        {visibleDoctors.length === 0 && (
+        {!isLoading && visibleDoctors.length === 0 && (
           <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
             <p className="font-semibold">{copy.noDoctors}</p>
           </div>

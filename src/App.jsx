@@ -50,6 +50,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [users, setUsers] = useState([]);
   const [notice, setNotice] = useState(hasSupabaseConfig ? "" : "Demo mode: add Supabase env values to use live data.");
+  const [fullDataLoading, setFullDataLoading] = useState(false);
 
   const canManage = !hasSupabaseConfig || (profile?.status === "approved" && (profile?.role === "staff" || profile?.role === "admin"));
   const isAdmin = !hasSupabaseConfig || (profile?.status === "approved" && profile?.role === "admin");
@@ -217,12 +218,17 @@ export default function App() {
   async function loadSupabaseData() {
     setLoading(true);
     try {
+      const weekStart = getStartOfWeek(new Date());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      const today = toISODate(new Date());
+
       const [departmentResult, doctorResult, doctorDepartmentResult, scheduleResult, consultResult] = await Promise.all([
         supabase.from("departments").select("*").order("name"),
         supabase.from("doctors").select("*").order("name"),
         loadAllRelationshipRows(),
-        loadAllTableRows("schedules"),
-        loadAllTableRows("consult_assignments")
+        loadScheduleRowsForRange(toISODate(weekStart), toISODate(weekEnd)),
+        loadConsultRowsForDate(today)
       ]);
 
       if (departmentResult.error) throw departmentResult.error;
@@ -245,10 +251,32 @@ export default function App() {
         setConsultAssignments(consultResult.data || []);
         setNotice("");
       }
+      setLoading(false);
+      void loadCompleteSupabaseData();
+    } catch (error) {
+      setNotice(error.message);
+      setLoading(false);
+    }
+  }
+
+  async function loadCompleteSupabaseData() {
+    setFullDataLoading(true);
+    try {
+      const [scheduleResult, consultResult] = await Promise.all([
+        loadAllTableRows("schedules"),
+        loadAllTableRows("consult_assignments")
+      ]);
+
+      if (scheduleResult.error) throw scheduleResult.error;
+      setSchedules(scheduleResult.data || []);
+
+      if (!consultResult.error) {
+        setConsultAssignments(consultResult.data || []);
+      }
     } catch (error) {
       setNotice(error.message);
     } finally {
-      setLoading(false);
+      setFullDataLoading(false);
     }
   }
 
@@ -261,6 +289,28 @@ export default function App() {
         .order("id", { ascending: true })
         .range(from, to)
     ));
+  }
+
+  function loadScheduleRowsForRange(startDate, endDate) {
+    return collectPaginatedRows((from, to) => (
+      supabase
+        .from("schedules")
+        .select("*")
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .order("date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to)
+    ));
+  }
+
+  async function loadConsultRowsForDate(date) {
+    return supabase
+      .from("consult_assignments")
+      .select("*")
+      .eq("date", date)
+      .order("department_id", { ascending: true })
+      .order("shift_key", { ascending: true });
   }
 
   function loadAllRelationshipRows() {
@@ -764,9 +814,13 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6">
-        {(notice || loading) && (
+        {(notice || loading || (fullDataLoading && activeTab.startsWith("admin-"))) && (
           <div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-medium text-cyan-900">
-            {loading ? copy.loading : notice}
+            {loading
+              ? copy.loading
+              : fullDataLoading
+                ? (language === "th" ? "กำลังเตรียมข้อมูลหน้าจัดการต่อด้านหลัง..." : "Preparing management data in the background...")
+                : notice}
           </div>
         )}
 
@@ -780,6 +834,7 @@ export default function App() {
             setSelectedDepartmentId={setSelectedDepartmentId}
             onOpenWeekly={setWeeklyDoctor}
             language={language}
+            isLoading={loading}
           />
         )}
 
@@ -801,6 +856,7 @@ export default function App() {
             doctors={activeDoctors}
             assignments={consultAssignments}
             language={language}
+            isLoading={loading}
           />
         )}
 

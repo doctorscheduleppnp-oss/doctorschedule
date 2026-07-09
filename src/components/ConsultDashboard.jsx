@@ -3,7 +3,7 @@ import { CONSULT_SHIFTS } from "../lib/consult";
 import { toISODate } from "../lib/date";
 import { getLocalizedValue, translations } from "../lib/i18n";
 
-export default function ConsultDashboard({ departments, doctors, assignments, language }) {
+export default function ConsultDashboard({ departments, doctors, assignments, language, isLoading = false }) {
   const copy = translations[language];
   const [selectedDate, setSelectedDate] = useState(toISODate(new Date()));
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("all");
@@ -65,7 +65,19 @@ export default function ConsultDashboard({ departments, doctors, assignments, la
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {visibleConsultRows.map((row) => (
+            {isLoading && (
+              <tr>
+                <td colSpan="6" className="px-4 py-8 text-center text-cyan-800">
+                  <p className="font-semibold">
+                    {language === "th" ? "กำลังเตรียมข้อมูลแพทย์รับปรึกษา" : "Preparing consult schedule"}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {language === "th" ? "กรุณารอสักครู่ ระบบกำลังโหลดข้อมูลล่าสุด" : "Please wait while the latest data is loading."}
+                  </p>
+                </td>
+              </tr>
+            )}
+            {!isLoading && visibleConsultRows.map((row) => (
               <tr key={row.department.id} className="align-top">
                 <td className="px-4 py-3 font-semibold text-slate-950">{getLocalizedValue(row.department, "name", language)}</td>
                 {row.assignments.map((assignment) => (
@@ -84,7 +96,7 @@ export default function ConsultDashboard({ departments, doctors, assignments, la
                 <td className="px-4 py-3"><StatusPill assignment={row.next} language={language} muted /></td>
               </tr>
             ))}
-            {visibleConsultRows.length === 0 && (
+            {!isLoading && visibleConsultRows.length === 0 && (
               <tr>
                 <td colSpan="6" className="px-4 py-8 text-center text-slate-500">
                   <p className="font-semibold">{copy.noConsultData}</p>

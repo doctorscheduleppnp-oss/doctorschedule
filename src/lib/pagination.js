@@ -1,4 +1,4 @@
-export const DEFAULT_PAGE_SIZE = 500;
+export const DEFAULT_PAGE_SIZE = 1000;
 
 export async function collectPaginatedRows(fetchPage, pageSize = DEFAULT_PAGE_SIZE) {
   const rows = [];
