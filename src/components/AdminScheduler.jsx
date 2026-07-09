@@ -12,6 +12,7 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
   const [exportStartDate, setExportStartDate] = useState(() => getCurrentMonthRange().start);
   const [exportEndDate, setExportEndDate] = useState(() => getCurrentMonthRange().end);
   const [draftSchedules, setDraftSchedules] = useState({});
+  const [doctorSearch, setDoctorSearch] = useState("");
   const dragValueRef = useRef(null);
 
   const selectedDoctor = doctors.find((doctor) => doctor.id === selectedDoctorId);
@@ -19,6 +20,29 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
     department.id === (selectedDoctor?.primary_department_id || selectedDoctor?.department_id || getDoctorDepartmentIds(selectedDoctor)[0])
   ));
   const weekDays = useMemo(() => getWeekDays(new Date(`${weekStart}T00:00:00`)), [weekStart]);
+  const filteredDoctors = useMemo(() => {
+    const query = doctorSearch.trim().toLowerCase();
+    if (!query) return doctors;
+
+    return doctors.filter((doctor) => {
+      const departmentNames = getDoctorDepartmentIds(doctor)
+        .map((departmentId) => {
+          const department = departments.find((item) => item.id === departmentId);
+          return `${getLocalizedValue(department, "name", "th")} ${getLocalizedValue(department, "name", "en")}`;
+        })
+        .join(" ");
+      const haystack = [
+        getLocalizedValue(doctor, "name", "th"),
+        getLocalizedValue(doctor, "name", "en"),
+        getLocalizedValue(doctor, "specialty", "th"),
+        getLocalizedValue(doctor, "specialty", "en"),
+        departmentNames
+      ].join(" ").toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [departments, doctorSearch, doctors]);
+  const selectedDoctorInFiltered = filteredDoctors.some((doctor) => doctor.id === selectedDoctorId);
 
   useEffect(() => {
     if (!doctors.length) {
@@ -153,23 +177,42 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
             คลิกหรือลากเพื่อเปิด/ปิดเวลาตรวจ แล้วบันทึกแบบ upsert ตามแพทย์และวันที่
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-          <select
-            value={selectedDoctorId}
-            disabled={!doctors.length}
-            onChange={(event) => {
-              setSelectedDoctorId(event.target.value);
-              setDraftSchedules({});
-            }}
-            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
-          >
-            {!doctors.length && <option value="">ยังไม่มีแพทย์</option>}
-            {doctors.map((doctor) => (
-              <option key={doctor.id} value={doctor.id}>
-                {doctor.name}
-              </option>
-            ))}
-          </select>
+        <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto_auto]">
+          <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
+            ค้นหาแพทย์
+            <input
+              type="search"
+              value={doctorSearch}
+              onChange={(event) => setDoctorSearch(event.target.value)}
+              placeholder="พิมพ์ชื่อแพทย์หรือแผนก"
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-hospital-500 focus:ring-4 focus:ring-hospital-100"
+            />
+          </label>
+          <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
+            เลือกแพทย์
+            <select
+              value={selectedDoctorId}
+              disabled={!doctors.length}
+              onChange={(event) => {
+                setSelectedDoctorId(event.target.value);
+                setDraftSchedules({});
+              }}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-hospital-500"
+            >
+              {!doctors.length && <option value="">ยังไม่มีแพทย์</option>}
+              {selectedDoctor && !selectedDoctorInFiltered ? (
+                <option value={selectedDoctor.id}>{getLocalizedValue(selectedDoctor, "name", "th") || selectedDoctor.name} (เลือกอยู่)</option>
+              ) : null}
+              {filteredDoctors.map((doctor) => (
+                <option key={doctor.id} value={doctor.id}>
+                  {getLocalizedValue(doctor, "name", "th") || doctor.name}
+                </option>
+              ))}
+              {doctors.length && !filteredDoctors.length && !selectedDoctor ? (
+                <option value="">ไม่พบแพทย์ที่ค้นหา</option>
+              ) : null}
+            </select>
+          </label>
           <input
             type="date"
             aria-label="เลือกสัปดาห์"

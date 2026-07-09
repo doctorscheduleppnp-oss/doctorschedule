@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "./icons";
 import { getLocalizedValue } from "../lib/i18n";
 import AdminDoctorImport from "./AdminDoctorImport";
@@ -40,6 +40,30 @@ export default function AdminDepartmentsDoctors({
   const [editingDoctorId, setEditingDoctorId] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isSavingDoctor, setIsSavingDoctor] = useState(false);
+  const [doctorSearch, setDoctorSearch] = useState("");
+
+  const filteredDoctors = useMemo(() => {
+    const query = doctorSearch.trim().toLowerCase();
+    if (!query) return doctors;
+
+    return doctors.filter((doctor) => {
+      const departmentNames = getDoctorDepartmentIds(doctor)
+        .map((departmentId) => {
+          const department = departments.find((item) => item.id === departmentId);
+          return `${getLocalizedValue(department, "name", "th")} ${getLocalizedValue(department, "name", "en")}`;
+        })
+        .join(" ");
+      const haystack = [
+        getLocalizedValue(doctor, "name", "th"),
+        getLocalizedValue(doctor, "name", "en"),
+        getLocalizedValue(doctor, "specialty", "th"),
+        getLocalizedValue(doctor, "specialty", "en"),
+        departmentNames
+      ].join(" ").toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [departments, doctorSearch, doctors]);
 
   useEffect(() => {
     if (!editingDoctorId) return undefined;
@@ -334,8 +358,37 @@ export default function AdminDepartmentsDoctors({
           </div>
         </form>
 
-        {!editingDoctorId ? <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {doctors.map((doctor) => {
+        {!editingDoctorId ? (
+          <>
+            <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                ค้นหาแพทย์
+                <div className="flex gap-2">
+                  <input
+                    type="search"
+                    value={doctorSearch}
+                    onChange={(event) => setDoctorSearch(event.target.value)}
+                    placeholder="พิมพ์ชื่อแพทย์ ความเชี่ยวชาญ หรือแผนก"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-hospital-500 focus:ring-4 focus:ring-hospital-100"
+                  />
+                  {doctorSearch ? (
+                    <button
+                      type="button"
+                      onClick={() => setDoctorSearch("")}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+                    >
+                      ล้าง
+                    </button>
+                  ) : null}
+                </div>
+              </label>
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                แสดง {filteredDoctors.length} จาก {doctors.length} คน
+              </p>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {filteredDoctors.map((doctor) => {
             const active = doctor.is_active !== false;
             const doctorName = getLocalizedValue(doctor, "name", "th");
             const departmentNames = getDoctorDepartmentIds(doctor)
@@ -369,7 +422,14 @@ export default function AdminDepartmentsDoctors({
               </div>
             );
           })}
-        </div> : null}
+              {!filteredDoctors.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500 sm:col-span-2">
+                  ไม่พบแพทย์ที่ตรงกับคำค้นหา
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
       </section>
     </>
