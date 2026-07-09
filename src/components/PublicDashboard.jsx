@@ -20,12 +20,24 @@ export default function PublicDashboard({
   const todayByDoctor = Object.fromEntries(
     schedules.filter((schedule) => schedule.date === today).map((schedule) => [schedule.doctor_id, schedule])
   );
+  const currentHour = new Date().getHours();
 
-  const visibleDoctors = doctors.filter((doctor) => {
-    const departmentMatch = selectedDepartmentId === "all" || doctorBelongsToDepartment(doctor, selectedDepartmentId);
-    const hasToday = hourKeys.some((key) => todayByDoctor[doctor.id]?.[key]);
-    return departmentMatch && hasToday;
-  });
+  const visibleDoctors = doctors
+    .filter((doctor) => {
+      const departmentMatch = selectedDepartmentId === "all" || doctorBelongsToDepartment(doctor, selectedDepartmentId);
+      const hasToday = hourKeys.some((key) => todayByDoctor[doctor.id]?.[key]);
+      return departmentMatch && hasToday;
+    })
+    .sort((doctorA, doctorB) => {
+      const statusA = getScheduleSortStatus(todayByDoctor[doctorA.id], currentHour);
+      const statusB = getScheduleSortStatus(todayByDoctor[doctorB.id], currentHour);
+      if (statusA.rank !== statusB.rank) return statusA.rank - statusB.rank;
+      if (statusA.hour !== statusB.hour) return statusA.hour - statusB.hour;
+      return getLocalizedValue(doctorA, "name", language).localeCompare(
+        getLocalizedValue(doctorB, "name", language),
+        language === "th" ? "th" : "en"
+      );
+    });
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -79,6 +91,20 @@ export default function PublicDashboard({
       </div>
     </section>
   );
+}
+
+function getScheduleSortStatus(schedule, currentHour) {
+  const activeHours = hourKeys
+    .map((key, index) => (schedule?.[key] ? index : null))
+    .filter((value) => value !== null);
+
+  if (!activeHours.length) return { rank: 3, hour: 99 };
+  if (activeHours.includes(currentHour)) return { rank: 0, hour: currentHour };
+
+  const nextHour = activeHours.find((hour) => hour > currentHour);
+  if (nextHour !== undefined) return { rank: 1, hour: nextHour };
+
+  return { rank: 2, hour: activeHours[activeHours.length - 1] };
 }
 
 function WeeklyChangeNote({ changes, language }) {
