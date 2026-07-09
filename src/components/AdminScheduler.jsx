@@ -170,14 +170,14 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 xl:flex-row xl:items-end xl:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5">
+        <div className="max-w-3xl">
           <h2 className="text-2xl font-semibold text-slate-950">Advanced Slot Management</h2>
           <p className="mt-2 text-sm text-slate-500">
             คลิกหรือลากเพื่อเปิด/ปิดเวลาตรวจ แล้วบันทึกแบบ upsert ตามแพทย์และวันที่
           </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_auto_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)_minmax(170px,auto)_minmax(170px,auto)] lg:items-end">
           <label className="grid gap-1.5 text-xs font-semibold text-slate-600">
             ค้นหาแพทย์
             <input
@@ -220,13 +220,13 @@ export default function AdminScheduler({ departments, doctors, schedules, onSave
             onChange={(event) => {
               setWeekStart(toISODate(getStartOfWeek(new Date(`${event.target.value}T00:00:00`))));
             }}
-            className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
+            className="min-w-0 rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-hospital-500"
           />
           <button
             type="button"
             onClick={saveChanges}
             disabled={!selectedDoctorId || !changedRows.length}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-hospital-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-hospital-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-hospital-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Icon name="save" />
             {changedRows.length ? `Save Changes (${changedRows.length} วัน)` : "Save Changes"}
