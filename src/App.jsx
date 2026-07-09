@@ -35,15 +35,17 @@ const baseTabs = [
 export default function App() {
   const [activeTab, setActiveTab] = useState("public");
   const [language, setLanguage] = useState(getInitialLanguage);
-  const [departments, setDepartments] = useState(sampleDepartments);
-  const [doctors, setDoctors] = useState(() => attachDoctorDepartments(sampleDoctors, []));
-  const [schedules, setSchedules] = useState(buildSampleSchedules());
+  const [departments, setDepartments] = useState(() => (hasSupabaseConfig ? [] : sampleDepartments));
+  const [doctors, setDoctors] = useState(() => (
+    hasSupabaseConfig ? [] : attachDoctorDepartments(sampleDoctors, [])
+  ));
+  const [schedules, setSchedules] = useState(() => (hasSupabaseConfig ? [] : buildSampleSchedules()));
   const [consultAssignments, setConsultAssignments] = useState(
-    buildSampleConsultAssignments(sampleDepartments, sampleDoctors)
+    () => (hasSupabaseConfig ? [] : buildSampleConsultAssignments(sampleDepartments, sampleDoctors))
   );
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("all");
   const [weeklyDoctor, setWeeklyDoctor] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(hasSupabaseConfig);
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [users, setUsers] = useState([]);
