@@ -88,14 +88,26 @@ export default function App() {
   });
 
   const weeklyChanges = useMemo(() => {
-    const weekDateSet = new Set(getWeekDays(getStartOfWeek(new Date())).map(toISODate));
+    const now = new Date();
+    const currentWeekStart = getStartOfWeek(now);
+    const nextWeekStart = new Date(currentWeekStart);
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
     const changesByDoctor = new Map();
 
     schedules.forEach((schedule) => {
-      if (!weekDateSet.has(schedule.date) || !schedule.created_at || !schedule.updated_at) return;
+      if (!schedule.date || !schedule.created_at || !schedule.updated_at) return;
+
+      const scheduleDate = new Date(`${schedule.date}T00:00:00`);
+      const updatedDate = new Date(schedule.updated_at);
+      if (
+        scheduleDate < currentWeekStart
+        || scheduleDate >= nextWeekStart
+        || updatedDate < currentWeekStart
+        || updatedDate >= nextWeekStart
+      ) return;
 
       const createdAt = new Date(schedule.created_at).getTime();
-      const updatedAt = new Date(schedule.updated_at).getTime();
+      const updatedAt = updatedDate.getTime();
       if (!Number.isFinite(createdAt) || !Number.isFinite(updatedAt) || updatedAt - createdAt < 1000) return;
 
       const doctor = doctors.find((item) => item.id === schedule.doctor_id);
