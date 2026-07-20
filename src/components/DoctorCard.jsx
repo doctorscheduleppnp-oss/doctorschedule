@@ -3,7 +3,7 @@ import { hourKeys } from "../lib/date";
 import { getLocalizedValue, translations } from "../lib/i18n";
 import { Icon } from "./icons";
 
-export default function DoctorCard({ doctor, schedule, onOpenWeekly, language }) {
+export default function DoctorCard({ doctor, schedule, onOpenWeekly, language, scheduleNote = "" }) {
   const copy = translations[language];
   const doctorName = getLocalizedValue(doctor, "name", language);
   const specialty = getLocalizedValue(doctor, "specialty", language);
@@ -31,6 +31,11 @@ export default function DoctorCard({ doctor, schedule, onOpenWeekly, language })
           {shiftTimeText && (
             <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-slate-700">
               <p className="text-sm font-semibold">{copy.clinicHours} {shiftTimeText}</p>
+            </div>
+          )}
+          {!shiftTimeText && scheduleNote && (
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-slate-600">
+              <p className="text-sm font-semibold">{scheduleNote}</p>
             </div>
           )}
         </div>

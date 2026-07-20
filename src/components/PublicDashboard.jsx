@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import DoctorCard from "./DoctorCard";
-import { hourKeys, toISODate } from "../lib/date";
+import { getStartOfWeek, getWeekDays, hourKeys, toISODate } from "../lib/date";
 import { formatLocalizedDate, getLocalizedValue, translations } from "../lib/i18n";
 import { doctorBelongsToDepartment } from "../lib/doctorDepartments";
 
@@ -15,18 +15,29 @@ export default function PublicDashboard({
   language,
   isLoading = false
 }) {
+  const [doctorSearch, setDoctorSearch] = useState("");
   const copy = translations[language];
   const today = toISODate(new Date());
+  const weekDateSet = new Set(getWeekDays(getStartOfWeek(new Date())).map(toISODate));
   const todayByDoctor = Object.fromEntries(
     schedules.filter((schedule) => schedule.date === today).map((schedule) => [schedule.doctor_id, schedule])
   );
+  const weeklySchedulesByDoctor = schedules.reduce((map, schedule) => {
+    if (!weekDateSet.has(schedule.date)) return map;
+    if (!map[schedule.doctor_id]) map[schedule.doctor_id] = [];
+    map[schedule.doctor_id].push(schedule);
+    return map;
+  }, {});
   const currentHour = new Date().getHours();
+  const normalizedSearch = normalizeSearchText(doctorSearch);
+  const isSearching = normalizedSearch.length > 0;
 
   const visibleDoctors = doctors
     .filter((doctor) => {
       const departmentMatch = selectedDepartmentId === "all" || doctorBelongsToDepartment(doctor, selectedDepartmentId);
       const hasToday = hourKeys.some((key) => todayByDoctor[doctor.id]?.[key]);
-      return departmentMatch && hasToday;
+      const searchMatch = !isSearching || getDoctorSearchText(doctor).includes(normalizedSearch);
+      return departmentMatch && searchMatch && (isSearching || hasToday);
     })
     .sort((doctorA, doctorB) => {
       const statusA = getScheduleSortStatus(todayByDoctor[doctorA.id], currentHour);
@@ -40,24 +51,36 @@ export default function PublicDashboard({
     });
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-950">{copy.todayTitle}</h1>
           <p className="mt-2 text-sm text-slate-500">{copy.todayDescription}</p>
         </div>
-        <label className="grid gap-2 text-sm font-medium text-slate-600">
-          <span>{copy.department}</span>
-          <select
-            value={selectedDepartmentId}
-            onChange={(event) => setSelectedDepartmentId(event.target.value)}
-            className="min-w-56 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-hospital-500 focus:ring-4 focus:ring-hospital-100"
-          >
-            <option value="all">{copy.allDepartments}</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>{getLocalizedValue(department, "name", language)}</option>
-            ))}
-          </select>
-        </label>
+        <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,auto)] md:items-end">
+          <label className="grid gap-2 text-sm font-medium text-slate-600">
+            <span>{copy.doctorSearch}</span>
+            <input
+              type="search"
+              value={doctorSearch}
+              onChange={(event) => setDoctorSearch(event.target.value)}
+              placeholder={copy.doctorSearchPlaceholder}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-hospital-500 focus:ring-4 focus:ring-hospital-100"
+            />
+          </label>
+          <label className="grid gap-2 text-sm font-medium text-slate-600">
+            <span>{copy.department}</span>
+            <select
+              value={selectedDepartmentId}
+              onChange={(event) => setSelectedDepartmentId(event.target.value)}
+              className="min-w-56 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-hospital-500 focus:ring-4 focus:ring-hospital-100"
+            >
+              <option value="all">{copy.allDepartments}</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>{getLocalizedValue(department, "name", language)}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {isLoading ? (
@@ -79,18 +102,73 @@ export default function PublicDashboard({
             key={doctor.id}
             doctor={doctor}
             schedule={todayByDoctor[doctor.id]}
+            scheduleNote={getNextClinicNote(weeklySchedulesByDoctor[doctor.id] || [], today, language, copy)}
             onOpenWeekly={onOpenWeekly}
             language={language}
           />
         ))}
         {!isLoading && visibleDoctors.length === 0 && (
           <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-            <p className="font-semibold">{copy.noDoctors}</p>
+            <p className="font-semibold">{isSearching ? copy.noDoctorSearchResults : copy.noDoctors}</p>
           </div>
         )}
       </div>
     </section>
   );
+}
+
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getDoctorSearchText(doctor) {
+  return normalizeSearchText([
+    doctor.name,
+    doctor.name_th,
+    doctor.name_en,
+    doctor.specialty,
+    doctor.specialty_th,
+    doctor.specialty_en
+  ].filter(Boolean).join(" "));
+}
+
+function getNextClinicNote(weeklySchedules, today, language, copy) {
+  const upcoming = weeklySchedules
+    .filter((schedule) => schedule.date >= today && hourKeys.some((key) => schedule[key]))
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+
+  if (!upcoming) return copy.noClinicThisWeek;
+
+  const dateText = formatLocalizedDate(new Date(`${upcoming.date}T00:00:00`), language, {
+    weekday: "short",
+    day: "numeric",
+    month: "short"
+  });
+  return `${copy.nextClinic}: ${dateText} ${getScheduleHours(upcoming)}`;
+}
+
+function getScheduleHours(schedule) {
+  const ranges = [];
+  let startHour = null;
+
+  hourKeys.forEach((hourKey, index) => {
+    const active = Boolean(schedule[hourKey]);
+    const isLast = index === hourKeys.length - 1;
+
+    if (active && startHour === null) startHour = index;
+
+    if (startHour !== null && (!active || isLast)) {
+      const endHour = active && isLast ? index + 1 : index;
+      ranges.push(`${formatHour(startHour)} - ${formatHour(endHour)}`);
+      startHour = null;
+    }
+  });
+
+  return ranges.join(", ");
+}
+
+function formatHour(hour) {
+  return `${String(hour).padStart(2, "0")}:00`;
 }
 
 function getScheduleSortStatus(schedule, currentHour) {
